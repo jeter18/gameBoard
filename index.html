@@ -12435,13 +12435,13 @@ body.wide{max-width:none}
 <script>
 const $=s=>document.querySelector(s),rnd=n=>Math.floor(Math.random()*n);
 const HTTPS=()=>/^https?:/.test(location.protocol),lnk=t=>HTTPS()?location.href.split('#')[0]+'#o='+encodeURIComponent(t):t;
-const VERSION='1.1.0',BUILD='23d11805';
+const VERSION='1.1.2',BUILD='76ffc8dd';
 // STUN opcional: apagado por defecto y sin guardarse. Al activarlo, un servidor externo (Google) ve tu IP pública y esta viaja en el código.
 let STUN=0,STUNURL='stun:stun.l.google.com:19302',STUNURL2='stun:stun1.l.google.com:19302';
 // Tailscale opcional: la IP propia (100.64.0.0/10) se escribe una vez, se valida y se guarda. Se añade como candidato extra reutilizando los puertos locales;
 // la respuesta conserva los candidatos de ese rango. Solo sirve si todos los dispositivos tienen Tailscale activo en la misma red privada (tailnet).
 const normTS=x=>{const o=String(x).trim().split('.');if(o.length!==4||o.some(p=>!/^\d{1,3}$/.test(p)))return '';const n=o.map(Number);return n.every(v=>v<=255)&&n[0]===100&&n[1]>=64&&n[1]<=127?n.join('.'):''},isTS=x=>!!normTS(String(x).split('@')[0]);
-let TSIP='',TSASKED=0;try{TSIP=normTS(localStorage.getItem('galaxies.ts')||'')}catch(e){}
+let TSIP='',TSASKED=0,JPC=null;try{TSIP=normTS(localStorage.getItem('galaxies.ts')||'')}catch(e){}
 const setTS=v=>{v=String(v||'').trim();const n=v?normTS(v):'';if(v&&!n)return false;TSIP=n;try{n?localStorage.setItem('galaxies.ts',n):localStorage.removeItem('galaxies.ts')}catch(e){}return true},
 tsCands=(sdp,cs)=>TSIP?[...new Set([...sdp.matchAll(/a=candidate:\S+ 1 udp \d+ \S+ (\d+) typ host/g)].map(m=>TSIP+'@'+m[1]))].filter(x=>!cs.includes(x)):[],
 tsBlock=()=>`<div style="margin:8px 0"><b>🛡 Tailscale (opcional)</b><br><input id=tsip value="${esc(TSIP)}" placeholder="tu IP 100.x.x.x" inputmode=decimal autocomplete=off style="padding:8px;font:inherit;width:11em"> <button data-a=ts>Guardar</button><br><small>${TSIP?'Se añade a tus invitaciones y respuestas.':'Para jugar entre redes si todos tenéis Tailscale activo. Vacío = no se usa.'}</small></div>`;
@@ -12757,7 +12757,7 @@ async function diagPeer(pc,dc,label){const o={label,st:pc.connectionState||pc.ic
 try{const rep=await pc.getStats();let pair=null;rep.forEach(r=>{if(r.type==='transport'&&r.selectedCandidatePairId)pair=rep.get(r.selectedCandidatePairId)});
 if(!pair)rep.forEach(r=>{if(r.type==='candidate-pair'&&(r.nominated||r.selected)&&r.state==='succeeded')pair=r});
 if(pair){const L=rep.get(pair.localCandidateId)||{},R=rep.get(pair.remoteCandidateId)||{};o.l=`${L.candidateType||'?'} ${L.address||L.ip||'?'}`;o.r=`${R.candidateType||'?'} ${R.address||R.ip||'?'}`;o.rtt=pair.currentRoundTripTime!=null?Math.round(pair.currentRoundTripTime*1000):null}
-const rem=new Map(),ps=[];rep.forEach(r=>{if(r.type==='remote-candidate')rem.set(r.id,r)});rep.forEach(r=>{if(r.type==='candidate-pair')ps.push({st:r.state,req:r.requestsSent||0,res:r.responsesReceived||0})});
+const rem=new Map(),ps=[];rep.forEach(r=>{if(r.type==='remote-candidate')rem.set(r.id,r)});rep.forEach(r=>{if(r.type==='candidate-pair')ps.push({st:r.state,req:r.requestsSent||0,res:r.responsesReceived||0,rx:r.requestsReceived||0})});
 o.pairs=ps;o.remotes=[...new Set([...rem.values()].map(r=>(r.candidateType||'?')+' '+(r.address||r.ip||'?')))]}catch(e){}
 return o}
 // Sonda de NAT: se pregunta a dos servidores STUN desde el mismo puerto local. Si devuelven puertos publicos distintos, el NAT es simetrico (STUN no basta).
@@ -12782,32 +12782,33 @@ if(!C.length)L.push('\u274c ninguna');else C.forEach(c=>L.push(`\u2022 ${c.addr}
 put(L.map(x=>`<div>${x}</div>`).join('')+'<p>\u23f3 Probando el canal de datos\u2026</p>');
 let ms=-1;try{ms=await diagSelf()}catch(e){}
 L.push(`${ms>=0?'\u2705':'\u274c'} Autoprueba del canal de datos: ${ms>=0?'abre correctamente (prueba completa en '+ms+' ms)':'no abre ni dentro de este dispositivo'}`);
-const P=PEERS.filter(x=>x&&x.dc);
+const P=PEERS.filter(x=>x&&x.dc);if(!P.length&&JPC&&ME!==0)P.push({pc:JPC,dc:{readyState:'pendiente'}});
 if(P.length){PINGS={};bc({t:'ping',ts:Date.now(),id:CID});L.push('<b>Conexiones activas:</b>');
 let infos=[];for(let i=0;i<P.length;i++)infos.push(await diagPeer(P[i].pc,P[i].dc,ME===0?`conexi\u00f3n ${i+1}`:'host'));await new Promise(r=>setTimeout(r,700));
 const lab=id=>{const k=SEATS.indexOf(id);return id===CID?'t\u00fa':k>=0?'J'+(k+1):SPECT.includes(id)?'\ud83d\udc41 espectador '+(SPECT.indexOf(id)+1):'host'};
 infos.forEach(o=>L.push(`\u2022 ${o.label}: ${o.st==='connected'?'\u2705':'\u26a0\ufe0f'} ${o.st}, canal ${o.dc}${o.l?` \u00b7 v\u00eda ${o.l} \u2192 ${o.r}`:''}${o.rtt!=null?` \u00b7 ${o.rtt} ms`:''}`));
-infos.forEach(o=>{if(!o.pairs)return;const t=o.pairs.length,env=o.pairs.filter(p=>p.req>0).length,res=o.pairs.filter(p=>p.res>0).length;
-L.push('\u2022 '+o.label+': direcciones del otro extremo: '+(o.remotes.length?o.remotes.join(', '):'ninguna')+' \u00b7 '+t+' pares ICE, '+env+' con env\u00edos, '+res+' con respuesta');
+infos.forEach(o=>{if(!o.pairs)return;const t=o.pairs.length,env=o.pairs.filter(p=>p.req>0).length,res=o.pairs.filter(p=>p.res>0).length,rx=o.pairs.filter(p=>p.rx>0).length;
+L.push('\u2022 '+o.label+': direcciones del otro extremo: '+(o.remotes.length?o.remotes.join(', '):'ninguna')+' \u00b7 '+t+' pares ICE, '+env+' con env\u00edos, '+res+' con respuesta, '+rx+' con peticiones recibidas');
 if(o.st!=='connected'){if(!o.remotes.length)V.push('\u26a0\ufe0f '+o.label+': no se conoce ninguna direcci\u00f3n del otro extremo (su respuesta o invitaci\u00f3n no llevaba direcciones p\u00fablicas: \u00bfSTUN apagado o rechazado?).');
-else if(env>0&&!res)V.push('\u26a0\ufe0f '+o.label+': se env\u00edan paquetes pero no llega ninguna respuesta: la red del otro extremo no deja pasar (NAT sim\u00e9trico o cortafuegos, frecuente en datos m\u00f3viles).')}});
+else if(env>0&&!res)V.push('\u26a0\ufe0f '+o.label+': se envían paquetes pero no llega ninguna respuesta'+(rx?': el otro extremo SÍ te llega, pero lo tuyo a él no: filtrado en un solo sentido (cortafuegos o NAT).':' y tampoco se recibe nada de él: la red del otro extremo no deja pasar (NAT estricto o cortafuegos, frecuente en datos móviles).'))}});
 Object.entries(PINGS).forEach(([id,v])=>L.push(`\u2022 ping a ${lab(id)}: ${v} ms${v>150?' \u26a0\ufe0f alto':''}`));
 if(!Object.keys(PINGS).length)L.push('\u2022 sin respuesta de ping todav\u00eda');
 if(infos.some(o=>o.st!=='connected'))V.push('\u26a0\ufe0f Hay conexiones que no est\u00e1n en estado "connected".')}
 L.push('ℹ️ Tailscale: '+(TSIP?'IP '+TSIP+(OFF?(OFF.includes(TSIP+'@')?' · incluida en tu invitación':' · NO está en tu invitación (genérala de nuevo)'):'')+(ANS?(ANS.includes(TSIP+'@')?' · incluida en tu respuesta':' · NO está en tu respuesta'):''):'sin configurar'));
+try{const pm=await navigator.permissions.query({name:'camera'});L.push('ℹ️ Permiso de cámara: '+({granted:'concedido',denied:'denegado',prompt:'sin decidir'}[pm.state]||pm.state)+(n('mdns')&&!n('lan')&&pm.state!=='granted'?' · sin él se oculta tu IP detrás de un nombre .local y el otro móvil puede no encontrarte':''))}catch(e){}
 if(ANS)L.push('ℹ️ Tu respuesta incluye '+(ANS.split('~').length-3)+' dirección(es) pública(s)');if(OFF)L.push('ℹ️ Tu invitación incluye '+OFF.split('~').slice(3).filter(isPub).length+' dirección(es) pública(s)');
 if(STUN){if(C.some(c=>c.typ==='srflx'))L.push('✅ STUN responde: tu dirección pública aparece arriba (la ve quien tenga tu código).');else V.push('⚠️ STUN activado pero no devuelve dirección pública: ¿sin internet, UDP bloqueado o servidor inaccesible?')}
-if(STUN&&C.some(c=>c.typ==='srflx')){try{const nt=await diagNat();if(nt.simetrico)V.push('⚠️ Tu red usa NAT simétrico (la dirección pública cambia según el destino): STUN no puede conectarte con otra red; hace falta Tailscale o un relé.');else if(nt.n)L.push('✅ Tu NAT mantiene la misma dirección pública hacia distintos destinos (favorable para STUN).')}catch(e){}}
+if(STUN&&C.some(c=>c.typ==='srflx')){try{const nt=await diagNat();if(nt.simetrico)V.push('⚠️ Tu red usa NAT simétrico (la dirección pública cambia según el destino): STUN no puede conectarte con otra red; hace falta Tailscale o un relé.');else if(nt.n)L.push('✅ Tu NAT no parece simétrico: misma dirección pública hacia dos servidores (favorable; la sonda no es concluyente si un servidor no respondió).')}catch(e){}}
 if(!C.length)V.push('\u274c No se obtuvo ninguna direcci\u00f3n: \u00bfWiFi desconectada o modo avi\u00f3n? Una VPN o extensi\u00f3n puede estar bloqueando WebRTC.');
 if(ms<0)V.push('\u274c El canal de datos no abre ni en local: WebRTC est\u00e1 bloqueado (extensi\u00f3n, pol\u00edtica de empresa o visor incrustado).');
 if(C.length&&STUN&&!n('lan')&&!n('mdns'))L.push('ℹ️ Sin red local (datos móviles): solo podrás conectar con otras redes mediante STUN.');
 if(C.length&&!STUN&&!n('lan')&&!n('mdns')&&!n('v6ula')&&!n('v6'))V.push('\u26a0\ufe0f No hay direcci\u00f3n de red local: \u00bfest\u00e1s conectado a una WiFi? Con datos m\u00f3viles los otros dispositivos no te alcanzan.');
 if(n('lan')>1)V.push(`\u26a0\ufe0f Ofreces ${n('lan')} redes locales distintas. Si alguna es de VPN, Hyper-V, WSL o Docker puede confundir: solo sirve la de tu WiFi (normalmente 192.168.x.x o 10.x.x.x). Desact\u00edvalas o haz de host con un m\u00f3vil.`);
-if(n('mdns')&&!n('lan'))V.push('\u2139\ufe0f Chrome oculta tu IP detr\u00e1s de un nombre .local. Funciona si el otro dispositivo resuelve nombres mDNS (misma WiFi sin "aislamiento de clientes"). Si no conecta, prueba con otro dispositivo como host.');
+if(n('mdns')&&!n('lan'))V.push('\u2139\ufe0f Chrome oculta tu IP detr\u00e1s de un nombre .local. Funciona si el otro dispositivo resuelve nombres mDNS (misma WiFi sin "aislamiento de clientes"). Si no conecta: concede el permiso de cámara a este sitio (así se muestra tu IP real) y vuelve a pulsar «Invitar jugador»; o prueba con otro dispositivo como host.');
 if(STUN&&n('cg'))L.push('ℹ️ Estás detrás de CGNAT (red del operador móvil): puede impedir la conexión directa con otras redes; la sonda de NAT lo confirma.');
 if(!STUN&&(n('cg')||(n('pub')&&!n('lan')&&!n('mdns'))))V.push('\u26a0\ufe0f Direcci\u00f3n de datos m\u00f3viles/p\u00fablica: conecta todos los dispositivos a la misma WiFi (o crea una zona WiFi en un m\u00f3vil).');
 if(n('ll')&&!n('lan')&&!n('mdns'))V.push('\u26a0\ufe0f Solo direcci\u00f3n de enlace local (169.254.x.x): la red no ha asignado IP todav\u00eda.');
-if(!V.length)V.push('\u2705 Todo listo para jugar en red local.');
+if(!V.length)V.push(STUN&&!n('lan')&&!n('mdns')?'ℹ️ Sin avisos. Estás en datos móviles: conectar con otra red depende de cómo trate el operador los paquetes entrantes.':'\u2705 Todo listo para jugar en red local.');
 put(L.map(x=>`<div>${x}</div>`).join('')+`<p><b>Resultado</b><br>${V.join('<br>')}</p>`)}
 // ---- PRESENCIA (online/offline) ----
 function nb(t){const e=$('#nb');if(!e)return;e.innerHTML=t||'';e.hidden=!t;if(document.body)document.body.classList.toggle('nbon',!!t)}
@@ -12827,16 +12828,17 @@ const stop=()=>{on=0;st.getTracks().forEach(t=>t.stop());m.hidden=true};m.onclic
 while(on){let t=null;try{if(bd){const r=await bd.detect(v);if(r.length)t=r[0].rawValue}else if(v.videoWidth){const k=Math.min(1,640/v.videoWidth);cv.width=Math.round(v.videoWidth*k);cv.height=Math.round(v.videoHeight*k);cx.drawImage(v,0,0,cv.width,cv.height);const d=cx.getImageData(0,0,cv.width,cv.height),r=window.jsQR&&jsQR(d.data,d.width,d.height);if(r)t=r.data}}catch(e){}
 if(t){stop();await cb(t);return}await new Promise(r=>setTimeout(r,bd?250:150))}}
 const camOk=()=>window.isSecureContext&&navigator.mediaDevices;
+async function lanStream(){try{return camOk()?await navigator.mediaDevices.getUserMedia({video:true}):null}catch(e){return null}}
 async function scanAnswer(){try{if(!camOk())return photoScan(v=>accept(v));await liveScan(accept)}catch(e){$('#m').hidden=true;note('⚠ Cámara no disponible ('+e.name+'). Usa la foto o copiar/pegar.')}}
 async function joinScan(){try{if(!camOk())return photoScan(v=>startJoin(v));await liveScan(startJoin)}catch(e){$('#m').hidden=true;note('⚠ Cámara no disponible ('+e.name+'). Pega el código o el enlace.')}}
 async function invite(){try{if(typeof RTCPeerConnection==='undefined')return note('⚠ Este visor no tiene WebRTC. Abre el enlace del artefacto directamente en Chrome (pestaña completa, fuera del chat).');
-note('⏳ Generando código…');const pc=new RTCPeerConnection(rtcCfg()),dc=pc.createDataChannel('g');wire(dc);PCC={pc,dc};await pc.setLocalDescription(await pc.createOffer());await gathered(pc);OFF=pack(pc.localDescription);draw()}catch(e){note('⚠ Error al invitar: '+e.name+' '+e.message)}}
+note('⏳ Generando código…');const st=await lanStream();try{const pc=new RTCPeerConnection(rtcCfg()),dc=pc.createDataChannel('g');wire(dc);PCC={pc,dc};await pc.setLocalDescription(await pc.createOffer());await gathered(pc);OFF=pack(pc.localDescription)}finally{if(st)st.getTracks().forEach(t=>t.stop())}draw()}catch(e){note('⚠ Error al invitar: '+e.name+' '+e.message)}}
 async function accept(v){v=v||($('#ra')&&$('#ra').value);if(!v||!v.trim()||!PCC)return;try{await PCC.pc.setRemoteDescription(unpack(v,'answer'));PCC.sas=sasCode(OFF.split('~')[2],v.trim().split('~')[2]);PEERS.push(PCC);PCC=null;OFF='';if(SPECMODAL){$('#m').hidden=true;SPECMODAL=0}draw()}catch(e){bad()}}
 async function startJoin(v){v=v||($('#ro')&&$('#ro').value)||'';if(!v.trim())return;if(v.includes('#o='))v=decodeURIComponent(v.split('#o=')[1]);try{const o=unpack(v,'offer');
 if(!STUN&&v.trim().split('~').slice(3).some(isPub))STUN=await localChoose('<b>Conexión por internet</b><br>El anfitrión ha incluido direcciones públicas. Para conectar habría que consultar un servidor STUN de Google, que verá tu IP pública, y esta iría en tu respuesta al anfitrión.',[['🌐 Permitir (consulta a Google)',1],['🏠 No, solo red local',0]],1)?1:0;
 if(!TSIP&&!TSASKED&&v.trim().split('~').slice(3).some(isTS)){TSASKED=1;let msg='<b>Tailscale</b><br>El anfitrión ofrece conexión por Tailscale. Si lo tienes activo en este dispositivo, escribe tu IP de Tailscale (100.x.x.x); si no, pulsa Omitir.';
 for(;;){const ip=await askText(msg);if(ip===null||ip==='')break;if(setTS(ip))break;msg='<b>IP no válida</b><br>Debe estar entre 100.64.0.0 y 100.127.255.255 (la que muestra la app de Tailscale).'}}
-const pc=new RTCPeerConnection(rtcCfg());
+const pc=new RTCPeerConnection(rtcCfg());JPC=pc;
 pc.ondatachannel=e=>{const dc=e.channel;wire(dc);PEERS=[{pc,dc}];dc.onopen=()=>bc({t:'join',id:CID,spec:SPEC})};
 await pc.setRemoteDescription(o);await pc.setLocalDescription(await pc.createAnswer());await gathered(pc);ANSF=pack(pc.localDescription);ANS=shortAns(ANSF);MYSAS=sasCode(v.trim().split('~')[2],ANSF.split('~')[2]);NET=1;ME=-1;CH=mkCH();if(!TICK)TICK=setInterval(clientTick,2000);draw()}catch(e){bad()}}
 function onMsg(m,dc){if(NET&&ME!==0)LASTHOST=Date.now();if(m.t==='join'&&dc&&!dc.cid&&typeof m.id==='string'&&/^[a-z0-9]{1,12}$/.test(m.id)&&!PEERS.some(p=>p&&p.dc&&p.dc!==dc&&p.dc.cid===m.id)){dc.cid=m.id;SEEN[m.id]=Date.now();const pr=PEERS.find(p=>p&&p.dc===dc);if(pr&&pr.sas)SAS[m.id]=pr.sas}if(dc&&dc.cid)SEEN[dc.cid]=Date.now();if(m.t==='ping'){bc({t:'pong',ts:m.ts,to:m.id,from:CID});return}if(m.t==='pong'){if(m.to===CID){PINGS[m.from]=Date.now()-m.ts;SEEN[m.from]=Date.now()}return}
